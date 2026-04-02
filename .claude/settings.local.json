@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Core/Models)",
+      "Bash(mkdir -p c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Core/Services)",
+      "Bash(mkdir -p c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Web/Pages)",
+      "Bash(mkdir -p c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Web/Shared)",
+      "Bash(mkdir -p c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Web/Controllers)",
+      "Bash(mkdir -p c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Web/wwwroot)",
+      "Bash(mkdir -p c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Cli)",
+      "Bash(dotnet build:*)",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" build \"c:/dev/Martin/InitiativeMerger\")",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" build \"c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Core\")",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" build \"c:/dev/Martin/InitiativeMerger/src/InitiativeMerger.Cli\")",
+      "Bash(az policy:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.azadvertizer.net)"
+    ]
+  }
+}

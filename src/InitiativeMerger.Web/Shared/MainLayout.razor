@@ -1,0 +1,54 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+<div class="container-fluid">
+    <nav class="navbar navbar-expand-lg bg-primary mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold text-white" href="/">
+                <i class="bi bi-shield-check me-2"></i>
+                Azure Initiative Merger
+            </a>
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <span class="navbar-text text-white-50 small d-none d-lg-block">
+                    Merge compliance initiatives without duplicates
+                </span>
+                <button class="btn btn-sm btn-outline-light" @onclick="ToggleTheme"
+                        title="@(_isDark ? "Switch to light mode" : "Switch to dark mode")">
+                    <i class="bi bi-@(_isDark ? "sun-fill" : "moon-stars-fill")"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        @Body
+    </div>
+
+    <footer class="text-center text-muted mt-5 mb-3 small">
+        <a href="https://github.com/your-org/initiative-merger" target="_blank" rel="noopener noreferrer">
+            <i class="bi bi-github me-1"></i>Open Source on GitHub
+        </a>
+    </footer>
+</div>
+
+@code {
+    private bool _isDark;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var theme = await JS.InvokeAsync<string?>("localStorage.getItem", "theme") ?? "light";
+            _isDark = theme == "dark";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        _isDark = !_isDark;
+        var theme = _isDark ? "dark" : "light";
+        await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-bs-theme", theme);
+        await JS.InvokeVoidAsync("localStorage.setItem", "theme", theme);
+    }
+}

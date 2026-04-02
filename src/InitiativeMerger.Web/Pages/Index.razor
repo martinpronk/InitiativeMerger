@@ -1,0 +1,735 @@
+@page "/"
+@using InitiativeMerger.Core.Models
+@using InitiativeMerger.Core.Services
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Forms
+@inject IInitiativeMergerService MergerService
+@inject IAzurePolicyService AzurePolicyService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Initiative Merger - Selection</PageTitle>
+
+<div class="row">
+    <div class="col-lg-8">
+        <h1 class="mb-1">
+            <i class="bi bi-layers me-2 text-primary"></i>
+            Merge Initiatives
+        </h1>
+        <p class="text-muted mb-4">
+            Select the compliance frameworks you want to combine. Duplicates are removed automatically.
+        </p>
+
+        <div class="d-flex align-items-center gap-2 mb-4">
+            @if (_azureStatus is null)
+            {
+                <div class="alert alert-secondary d-flex align-items-center mb-0 flex-grow-1" role="status">
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    Checking Azure CLI status...
+                </div>
+            }
+            else if (_azureStatus.IsLoggedIn)
+            {
+                <div class="alert alert-success d-flex align-items-center mb-0 flex-grow-1" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>
+                    Connected as <strong class="ms-1">@_azureStatus.AccountName</strong>
+                    <span class="text-muted ms-2 small">(Tenant: @_azureStatus.TenantId)</span>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-warning d-flex align-items-center mb-0 flex-grow-1" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    @_azureStatus.ErrorMessage
+                    @if (!_azureStatus.IsAvailable)
+                    {
+                        <span class="ms-1">Install Azure CLI via <a href="https://aka.ms/installazurecliwindows" target="_blank" rel="noopener noreferrer">aka.ms/installazurecli</a>.</span>
+                    }
+                    else
+                    {
+                        <span class="ms-1">Run <code>az login</code> in a terminal and click Refresh.</span>
+                    }
+                </div>
+            }
+            <button class="btn btn-outline-secondary btn-sm" @onclick="RefreshAzureStatus" title="Refresh Azure CLI status">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-body-secondary fw-semibold">
+                <i class="bi bi-check2-square me-2"></i>Step 1: Select one or more frameworks
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    @foreach (var initiative in WellKnownInitiative.All)
+                    {
+                        <div class="col-md-6">
+                            <div class="card border @(_selectedKeys.Contains(initiative.Key) ? "border-primary bg-primary bg-opacity-10" : "") p-3 h-100">
+                                <div class="d-flex align-items-start gap-2">
+                                    <input class="form-check-input mt-1 flex-shrink-0"
+                                           type="checkbox"
+                                           id="chk_@initiative.Key"
+                                           checked="@_selectedKeys.Contains(initiative.Key)"
+                                           @onchange="() => ToggleKey(initiative.Key)" />
+                                    <label class="form-check-label flex-grow-1" for="chk_@initiative.Key">
+                                        <strong>@initiative.Key</strong>
+                                        <br />
+                                        <span class="text-muted small">@initiative.DisplayName</span>
+                                        <br />
+                                        <span class="text-secondary" style="font-size:0.8rem">@initiative.Description</span>
+                                    </label>
+                                    <button class="btn btn-outline-secondary btn-sm flex-shrink-0"
+                                            title="Preview policies in this framework"
+                                            data-bs-toggle="offcanvas"
+                                            data-bs-target="#policyOffcanvas"
+                                            @onclick="() => _ = LoadPreviewAsync(initiative.Key)"
+                                            @onclick:stopPropagation="true">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-body-secondary fw-semibold">
+                <i class="bi bi-plus-circle me-2"></i>Step 2: Additional initiatives (optional)
+            </div>
+            <div class="card-body">
+                <label class="form-label">Add extra initiative IDs or display names (one per line):</label>
+                <textarea class="form-control font-monospace"
+                          rows="3"
+                          placeholder="/providers/Microsoft.Authorization/policySetDefinitions/..."
+                          @bind="_customInitiativesText"
+                          @bind:event="oninput"></textarea>
+                <div class="form-text">Accepts full resource IDs or display names.</div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-body-secondary fw-semibold">
+                <i class="bi bi-gear me-2"></i>Step 3: Configuration
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Name of the new initiative <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" @bind="_outputName" placeholder="My Merged Initiative" maxlength="128" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Category</label>
+                        <input type="text" class="form-control" @bind="_outputCategory" placeholder="Regulatory Compliance" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="2" @bind="_outputDescription" maxlength="512"
+                                  placeholder="Description of the merged initiative..."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Conflict resolution strategy</label>
+                        <select class="form-select" @bind="_conflictStrategy">
+                            <option value="@ConflictResolutionStrategy.PreferFirst">First initiative takes precedence</option>
+                            <option value="@ConflictResolutionStrategy.MostRestrictive">Most restrictive value</option>
+                            <option value="@ConflictResolutionStrategy.UseDefault">Use Azure defaults</option>
+                            <option value="@ConflictResolutionStrategy.FailOnConflict">Stop on conflicts (manual)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check mt-4">
+                            <input class="form-check-input" type="checkbox" id="ascCheck" @bind="_includeAscMetadata" />
+                            <label class="form-check-label" for="ascCheck">
+                                Visible in Defender for Cloud → Security policies
+                                <span class="text-muted small d-block">Adds <code>"ASC":"true"</code> to the metadata</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <div class="p-3 rounded border @(_deployToAzure ? "border-primary bg-primary bg-opacity-10" : "border-secondary-subtle bg-body-secondary")">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="deploySwitch" @bind="_deployToAzure"
+                               style="width:2.5em; height:1.25em;" />
+                        <label class="form-check-label fw-semibold ms-1" for="deploySwitch">
+                            <i class="bi bi-cloud-upload me-1"></i>Deploy to Azure after generation
+                        </label>
+                    </div>
+                </div>
+
+                @if (_deployToAzure)
+                {
+                    <div class="ms-2 mt-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" id="deployDefinitionOnly"
+                                   checked="@(_deploymentTarget == DeploymentTarget.DefinitionOnly)"
+                                   @onchange="() => _deploymentTarget = DeploymentTarget.DefinitionOnly" />
+                            <label class="form-check-label" for="deployDefinitionOnly">
+                                <strong>Create definition only</strong>
+                                <span class="text-muted small ms-1">— visible under Azure Policy → Definitions</span>
+                            </label>
+                        </div>
+                        <div class="form-check mt-1">
+                            <input class="form-check-input" type="radio" id="deployAssignToScope"
+                                   checked="@(_deploymentTarget == DeploymentTarget.AssignToScope)"
+                                   @onchange="() => _deploymentTarget = DeploymentTarget.AssignToScope" />
+                            <label class="form-check-label" for="deployAssignToScope">
+                                <strong>Assign to scope</strong>
+                                <span class="text-muted small ms-1">— appears in Defender for Cloud → Regulatory Compliance</span>
+                            </label>
+                        </div>
+                        @if (_deploymentTarget == DeploymentTarget.AssignToScope)
+                        {
+                            <div class="alert alert-info py-2 px-3 mt-2 small">
+                                <i class="bi bi-info-circle me-1"></i>
+                                The initiative will be created <em>and</em> immediately assigned to the specified scope.
+                                After deployment it will appear in <strong>Microsoft Defender for Cloud → Regulatory Compliance → Manage compliance standards</strong>.
+                                Requires <strong>Policy Contributor</strong> and <strong>Security Admin</strong> or higher.
+                            </div>
+                        }
+                    </div>
+                    <div class="row g-3 mt-1 ms-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Subscription ID</label>
+                            <input type="text" class="form-control font-monospace" @bind="_subscriptionId"
+                                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Management Group ID (alternative)</label>
+                            <input type="text" class="form-control font-monospace" @bind="_managementGroupId"
+                                   placeholder="mg-my-organisation" />
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (_validationError is not null)
+        {
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-circle me-2"></i>@_validationError
+            </div>
+        }
+
+        @if (_loadError is not null)
+        {
+            <div class="alert alert-warning alert-dismissible">
+                <i class="bi bi-exclamation-triangle me-2"></i>@_loadError
+                <button type="button" class="btn-close" @onclick="() => _loadError = null"></button>
+            </div>
+        }
+
+        <div class="d-flex gap-2 mb-3">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="SaveConfigAsync" title="Save current configuration to a JSON file">
+                <i class="bi bi-download me-1"></i>Save config
+            </button>
+            <label class="btn btn-outline-secondary btn-sm mb-0" title="Load configuration from a JSON file" style="cursor:pointer;">
+                <i class="bi bi-upload me-1"></i>Load config
+                <InputFile id="configFileInput" accept=".json" OnChange="LoadConfigAsync" style="display:none;" />
+            </label>
+        </div>
+
+        <button class="btn btn-primary btn-lg w-100 mb-5"
+                @onclick="StartMerge"
+                disabled="@_isMerging">
+            @if (_isMerging)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <span>Fetching and merging initiatives...</span>
+            }
+            else
+            {
+                <i class="bi bi-arrow-right-circle me-2"></i>
+                <span>Start merge</span>
+            }
+        </button>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Why merge? -->
+        <div class="card border-warning mt-4">
+            <div class="card-header bg-warning bg-opacity-10 fw-semibold text-warning-emphasis">
+                <i class="bi bi-exclamation-diamond me-2"></i>Why merge?
+            </div>
+            <div class="card-body small">
+                <p class="text-muted mb-3">
+                    Azure Policy evaluates each initiative independently.
+                    When you assign multiple frameworks, <strong>the same policies run multiple times</strong>.
+                </p>
+
+                <table class="table table-sm table-borderless mb-2 small">
+                    <tbody>
+                        <tr><td><span class="badge bg-secondary">MCSB</span></td><td class="text-muted">Microsoft Cloud Security Benchmark</td><td class="text-end text-muted">~223</td></tr>
+                        <tr><td><span class="badge bg-secondary">CIS</span></td><td class="text-muted">CIS Azure Foundations Benchmark</td><td class="text-end text-muted">~108</td></tr>
+                        <tr><td><span class="badge bg-secondary">ISO27001</span></td><td class="text-muted">ISO 27001:2013</td><td class="text-end text-muted">~450</td></tr>
+                        <tr><td><span class="badge bg-secondary">NIST</span></td><td class="text-muted">NIST SP 800-53 Rev. 5</td><td class="text-end text-muted">~696</td></tr>
+                        <tr><td><span class="badge bg-secondary">BIO</span></td><td class="text-muted">NL BIO Cloud Theme V2</td><td class="text-end text-muted">~282</td></tr>
+                        <tr class="border-top">
+                            <td colspan="2" class="text-danger fw-semibold pt-2">Naïve total (with overlap)</td>
+                            <td class="text-end text-danger fw-semibold pt-2">~1.759</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" class="text-success fw-semibold">After deduplication</td>
+                            <td class="text-end text-success fw-semibold">significantly fewer ✓</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p class="text-muted mb-0 mt-2">
+                    Without deduplication: duplicate compliance findings, skewed scores and higher evaluation costs.
+                </p>
+            </div>
+        </div>
+
+        <div class="card bg-body-secondary border-0 mt-3">
+            <div class="card-body">
+                <h6 class="fw-semibold"><i class="bi bi-info-circle me-2"></i>How does it work?</h6>
+                <ol class="small text-muted ps-3">
+                    <li class="mb-1">Select one or more compliance frameworks</li>
+                    <li class="mb-1">The tool fetches all policy definitions via Azure CLI</li>
+                    <li class="mb-1">Duplicates are removed automatically</li>
+                    <li class="mb-1">Parameter conflicts are resolved based on your chosen strategy</li>
+                    <li class="mb-1">You receive a ready-to-deploy initiative JSON</li>
+                    <li>Optional: deploy directly to Azure</li>
+                </ol>
+                <hr />
+                <h6 class="fw-semibold"><i class="bi bi-shield-lock me-2"></i>Requirements</h6>
+                <ul class="small text-muted ps-3">
+                    <li>Azure CLI (<code>az</code>) installed</li>
+                    <li><code>az login</code> executed</li>
+                    <li>For deployment: Policy Contributor role</li>
+                </ul>
+            </div>
+        </div>
+
+        @if (_selectedKeys.Count > 0)
+        {
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6 class="fw-semibold"><i class="bi bi-check2-all me-2"></i>Selected (@_selectedKeys.Count)</h6>
+                    <ul class="list-unstyled mb-0">
+                        @foreach (var key in _selectedKeys)
+                        {
+                            <li class="small text-muted">
+                                <i class="bi bi-dot text-primary"></i>
+                                @WellKnownInitiative.FindByKey(key)?.DisplayName
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+        <div class="card border-danger-subtle mt-3" style="opacity: 0.85;">
+            <div class="card-header bg-danger bg-opacity-10 py-2">
+                <span class="small fw-semibold text-danger">
+                    <i class="bi bi-exclamation-circle me-1"></i>Disclaimer
+                </span>
+            </div>
+            <div class="card-body py-2 px-3">
+                <p class="small text-muted mb-2">
+                    This tool is provided <strong>"as is"</strong>, without warranty of any kind — express or implied.
+                    Use it at your own risk.
+                </p>
+                <p class="small text-muted mb-2">
+                    The merged initiative is generated automatically based on Microsoft's published
+                    built-in policy definitions. Policy schemas, parameters and version numbers
+                    change over time. <strong>Always review the generated JSON before deploying
+                    it to a production environment.</strong>
+                </p>
+                <p class="small text-muted mb-0">
+                    The authors accept no liability for compliance gaps, misconfigurations,
+                    service disruptions or any other issues arising from the use of this software
+                    in your Azure environment. Verifying correctness against your organisation's
+                    compliance obligations remains your own responsibility.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Offcanvas: policy preview per initiative -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="policyOffcanvas" style="width: 420px;">
+    <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title">
+            @if (_previewKey is not null)
+            {
+                <span class="badge bg-primary me-2">@_previewKey</span>
+                @(WellKnownInitiative.FindByKey(_previewKey)?.DisplayName ?? _previewKey)
+            }
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body p-0">
+        @if (_previewLoading)
+        {
+            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                <span class="spinner-border spinner-border-sm me-2"></span> Fetching policies...
+            </div>
+        }
+        else if (_previewError is not null)
+        {
+            <div class="alert alert-danger m-3">@_previewError</div>
+        }
+        else if (_previewItems is not null)
+        {
+            <div class="p-3 border-bottom d-flex gap-2 align-items-center">
+                <input type="search" class="form-control form-control-sm"
+                       placeholder="Search in @_previewItems.Count policies..."
+                       @bind="_previewFilter" @bind:event="oninput" />
+                @if (_previewItems.Any(p => p.NeedsNameLoad))
+                {
+                    @if (_loadingNames)
+                    {
+                        <span class="text-muted small text-nowrap">
+                            <span class="spinner-border spinner-border-sm me-1"></span>@_namesLoaded/@_namesTotal
+                        </span>
+                    }
+                    else
+                    {
+                        var hasFormatted = _previewItems!.Any(p => p.FormattedName is not null && p.DisplayName is null);
+                        var hasGuids = _previewItems!.Any(p => p.FormattedName is null && p.DisplayName is null);
+                        var btnLabel = hasGuids ? "Load names" : "Full names";
+                        var btnTitle = hasFormatted && !hasGuids
+                            ? "Replaces abbreviated names with full Azure display names (1 CLI call per policy)"
+                            : "Fetches display names via Azure CLI (1 call per policy)";
+                        <button class="btn btn-outline-primary btn-sm text-nowrap"
+                                title="@btnTitle"
+                                @onclick="LoadNamesAsync">
+                            <i class="bi bi-cloud-download me-1"></i>@btnLabel
+                        </button>
+                    }
+                }
+            </div>
+            <ul class="list-group list-group-flush" style="overflow-y: auto; max-height: calc(100vh - 160px);">
+                @{
+                    var previewFiltered = string.IsNullOrWhiteSpace(_previewFilter)
+                        ? _previewItems
+                        : _previewItems.Where(p => p.BestName.Contains(_previewFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+                @foreach (var item in previewFiltered)
+                {
+                    <li class="list-group-item py-2 small @(item.FormattedName is null && item.DisplayName is null ? "text-muted fst-italic" : "")">
+                        @item.BestName
+                    </li>
+                }
+                @if (previewFiltered.Count == 0)
+                {
+                    <li class="list-group-item text-muted text-center py-3">No results</li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    private HashSet<string> _selectedKeys = [];
+    private string _customInitiativesText = string.Empty;
+    private string _outputName = "Merged Compliance Initiative";
+    private string _outputDescription = string.Empty;
+    private string _outputCategory = "Regulatory Compliance";
+    private ConflictResolutionStrategy _conflictStrategy = ConflictResolutionStrategy.PreferFirst;
+    private bool _includeAscMetadata = true;
+    private bool _deployToAzure = false;
+    private DeploymentTarget _deploymentTarget = DeploymentTarget.DefinitionOnly;
+    private string _subscriptionId = string.Empty;
+    private string _managementGroupId = string.Empty;
+    private bool _isMerging = false;
+    private string? _validationError;
+    private string? _loadError;
+    private AzureCliStatus? _azureStatus;
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
+    // Policy preview
+    private string? _previewKey;
+    private List<PreviewItem>? _previewItems;
+    private bool _previewLoading;
+    private string? _previewError;
+    private string _previewFilter = string.Empty;
+    private readonly Dictionary<string, List<PreviewItem>> _previewCache = [];
+    private bool _loadingNames;
+    private int _namesLoaded;
+    private int _namesTotal;
+    private CancellationTokenSource? _namesCts;
+
+    private sealed class PreviewItem
+    {
+        public required string PolicyDefinitionId { get; init; }
+        /// <summary>Human-readable name derived from the referenceId (camelCase → words), or null if the referenceId is a GUID.</summary>
+        public required string? FormattedName { get; init; }
+        /// <summary>Short GUID — always present as fallback.</summary>
+        public required string ShortId { get; init; }
+        /// <summary>Real display name loaded via az policy definition show.</summary>
+        public string? DisplayName { get; set; }
+        /// <summary>Best available name for display.</summary>
+        public string BestName => DisplayName ?? FormattedName ?? ShortId;
+        /// <summary>True if the real display name has not yet been fetched.</summary>
+        public bool NeedsNameLoad => DisplayName is null;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _azureStatus = await AzurePolicyService.CheckAzureCliStatusAsync();
+    }
+
+    /// <summary>Refreshes the Azure CLI status so the user can continue after az login.</summary>
+    private async Task RefreshAzureStatus()
+    {
+        _azureStatus = null; // Show spinner temporarily
+        _azureStatus = await AzurePolicyService.CheckAzureCliStatusAsync();
+    }
+
+    /// <summary>Fetches the policy list for the preview panel (with cache).</summary>
+    private async Task LoadPreviewAsync(string key)
+    {
+        _previewKey = key;
+        _previewFilter = string.Empty;
+        _previewError = null;
+        _loadingNames = false;
+        _namesCts?.Cancel();
+        _namesCts = null;
+
+        if (_previewCache.TryGetValue(key, out var cached))
+        {
+            _previewItems = cached;
+            return;
+        }
+
+        _previewLoading = true;
+        _previewItems = null;
+
+        try
+        {
+            var known = WellKnownInitiative.FindByKey(key);
+            var resourceId = known?.ResourceId ?? key;
+            var initiative = await AzurePolicyService.GetInitiativeAsync(resourceId);
+
+            if (initiative is null)
+            {
+                _previewError = $"Initiative '{key}' could not be retrieved. Make sure az login has been run.";
+                return;
+            }
+
+            var items = initiative.PolicyDefinitions
+                .Select(p => new PreviewItem
+                {
+                    PolicyDefinitionId = p.PolicyDefinitionId,
+                    ShortId = p.ShortName,
+                    FormattedName = FormatPolicyName(p.PolicyDefinitionReferenceId)
+                })
+                .OrderBy(p => p.BestName)
+                .ToList();
+
+            _previewCache[key] = items;
+            _previewItems = items;
+        }
+        catch (Exception ex)
+        {
+            _previewError = $"Error fetching initiative: {ex.Message}";
+        }
+        finally
+        {
+            _previewLoading = false;
+        }
+    }
+
+    /// <summary>Loads real display names for policies currently showing a GUID.</summary>
+    private async Task LoadNamesAsync()
+    {
+        if (_previewItems is null || _loadingNames) return;
+
+        var toLoad = _previewItems.Where(p => p.NeedsNameLoad).ToList();
+        if (toLoad.Count == 0) return;
+
+        _loadingNames = true;
+        _namesLoaded = 0;
+        _namesTotal = toLoad.Count;
+        _namesCts = new CancellationTokenSource();
+
+        try
+        {
+            var ids = toLoad.Select(p => p.PolicyDefinitionId);
+            var progress = new Progress<int>(done =>
+            {
+                _namesLoaded = done;
+                InvokeAsync(StateHasChanged);
+            });
+
+            var names = await AzurePolicyService.GetPolicyDisplayNamesAsync(ids, progress, _namesCts.Token);
+
+            foreach (var item in toLoad)
+            {
+                if (names.TryGetValue(item.PolicyDefinitionId, out var dn))
+                    item.DisplayName = dn;
+            }
+
+            // Re-sort now that real names are available
+            if (_previewItems is not null)
+            {
+                var reordered = _previewItems.OrderBy(p => p.BestName).ToList();
+                var cacheKey = _previewKey;
+                if (cacheKey is not null) _previewCache[cacheKey] = reordered;
+                _previewItems = reordered;
+            }
+        }
+        catch (OperationCanceledException) { /* user switched initiative */ }
+        catch (Exception ex)
+        {
+            _previewError = $"Error loading names: {ex.Message}";
+        }
+        finally
+        {
+            _loadingNames = false;
+        }
+    }
+
+    /// <summary>
+    /// Converts a camelCase/PascalCase referenceId to human-readable text.
+    /// Returns null if the referenceId is null or a GUID — signal that the real name must be loaded.
+    /// </summary>
+    private static string? FormatPolicyName(string? referenceId)
+    {
+        if (string.IsNullOrEmpty(referenceId) || Guid.TryParse(referenceId, out _))
+            return null;
+        // Insert spaces before uppercase letters: "StorageAccountShouldUse" → "Storage Account Should Use"
+        return System.Text.RegularExpressions.Regex.Replace(referenceId, "(?<=[a-z0-9])([A-Z])", " $1");
+    }
+
+    /// <summary>Toggles a well-known initiative key on or off.</summary>
+    private void ToggleKey(string key)
+    {
+        if (!_selectedKeys.Remove(key))
+            _selectedKeys.Add(key);
+    }
+
+    /// <summary>Serialises the current form state and triggers a browser download.</summary>
+    private async Task SaveConfigAsync()
+    {
+        var config = new MergeConfiguration
+        {
+            SelectedFrameworks = [.. _selectedKeys],
+            CustomInitiatives = _customInitiativesText,
+            OutputName = _outputName,
+            OutputDescription = _outputDescription,
+            OutputCategory = _outputCategory,
+            ConflictStrategy = _conflictStrategy,
+            IncludeAscMetadata = _includeAscMetadata,
+            DeployToAzure = _deployToAzure,
+            DeploymentTarget = _deploymentTarget,
+            SubscriptionId = string.IsNullOrWhiteSpace(_subscriptionId) ? null : _subscriptionId.Trim(),
+            ManagementGroupId = string.IsNullOrWhiteSpace(_managementGroupId) ? null : _managementGroupId.Trim()
+        };
+
+        var json = JsonSerializer.Serialize(config, _jsonOptions);
+        var filename = $"initiative-config-{DateTime.Now:yyyyMMdd-HHmm}.json";
+        await JS.InvokeVoidAsync("downloadTextFile", filename, json);
+    }
+
+    /// <summary>Reads a config JSON file and restores the form state.</summary>
+    private async Task LoadConfigAsync(InputFileChangeEventArgs e)
+    {
+        _loadError = null;
+        var file = e.File;
+        if (file is null) return;
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 512 * 1024);
+            var config = await JsonSerializer.DeserializeAsync<MergeConfiguration>(stream, _jsonOptions);
+            if (config is null)
+            {
+                _loadError = "Invalid configuration file.";
+                return;
+            }
+
+            _selectedKeys = [.. config.SelectedFrameworks];
+            _customInitiativesText = config.CustomInitiatives;
+            _outputName = config.OutputName;
+            _outputDescription = config.OutputDescription;
+            _outputCategory = config.OutputCategory;
+            _conflictStrategy = config.ConflictStrategy;
+            _includeAscMetadata = config.IncludeAscMetadata;
+            _deployToAzure = config.DeployToAzure;
+            _deploymentTarget = config.DeploymentTarget;
+            _subscriptionId = config.SubscriptionId ?? string.Empty;
+            _managementGroupId = config.ManagementGroupId ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Could not load configuration: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Validates input, builds a MergeRequest and navigates to the result page.
+    /// </summary>
+    private async Task StartMerge()
+    {
+        _validationError = null;
+
+        if (_azureStatus is null || !_azureStatus.IsLoggedIn)
+        {
+            _validationError = "Azure CLI not available or not logged in. Run 'az login' and click Refresh.";
+            return;
+        }
+
+        if (_selectedKeys.Count == 0 && string.IsNullOrWhiteSpace(_customInitiativesText))
+        {
+            _validationError = "Select at least one initiative or enter a custom ID.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_outputName))
+        {
+            _validationError = "Enter a name for the new initiative.";
+            return;
+        }
+
+        _isMerging = true;
+
+        try
+        {
+            var customIds = _customInitiativesText
+                .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .ToList();
+
+            var request = new MergeRequest
+            {
+                WellKnownKeys = [.. _selectedKeys],
+                CustomInitiativeIds = customIds,
+                OutputDisplayName = _outputName.Trim(),
+                OutputDescription = _outputDescription.Trim(),
+                OutputCategory = _outputCategory.Trim(),
+                ConflictResolution = _conflictStrategy,
+                IncludeAscMetadata = _includeAscMetadata,
+                DeployToAzure = _deployToAzure,
+                DeploymentTarget = _deploymentTarget,
+                SubscriptionId = _deployToAzure && !string.IsNullOrWhiteSpace(_subscriptionId) ? _subscriptionId.Trim() : null,
+                ManagementGroupId = _deployToAzure && !string.IsNullOrWhiteSpace(_managementGroupId) ? _managementGroupId.Trim() : null
+            };
+
+            var result = await MergerService.MergeAsync(request);
+
+            MergeResultCache.Store(result);
+            Navigation.NavigateTo("/result");
+        }
+        catch (Exception ex)
+        {
+            _validationError = $"Unexpected error during merge: {ex.Message}";
+        }
+        finally
+        {
+            _isMerging = false;
+        }
+    }
+}

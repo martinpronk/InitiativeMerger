@@ -1,0 +1,28 @@
+# Build output
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+.vscode/
+
+# NuGet
+*.nupkg
+packages/
+
+# Publish output
+publish/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ASP.NET
+wwwroot/_framework/
+
+# Secrets / environment
+appsettings.Development.json
+*.pfx
+*.key

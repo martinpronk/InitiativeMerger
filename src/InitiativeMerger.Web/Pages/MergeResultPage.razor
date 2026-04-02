@@ -1,0 +1,1022 @@
+@page "/result"
+@using InitiativeMerger.Core.Models
+@using InitiativeMerger.Core.Services
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@inject NavigationManager Navigation
+@inject IInitiativeMergerService MergerService
+@inject IJSRuntime JS
+
+<PageTitle>Merge Result - Initiative Merger</PageTitle>
+
+@if (_result is null)
+{
+    <div class="alert alert-warning">
+        No merge result found. <a href="/">Go back to the selection page.</a>
+    </div>
+}
+else if (!_result.Success)
+{
+    <div class="alert alert-danger">
+        <h5><i class="bi bi-x-circle me-2"></i>Merge failed</h5>
+        <p class="mb-0">@_result.ErrorMessage</p>
+    </div>
+    <a href="/" class="btn btn-outline-primary mt-3">
+        <i class="bi bi-arrow-left me-2"></i>Back
+    </a>
+}
+else
+{
+    <h1 class="mb-1">
+        <i class="bi bi-check-circle-fill text-success me-2"></i>
+        Merge successful
+    </h1>
+    <p class="text-muted mb-4">@_result.InitiativeName</p>
+
+    <!-- Statistics -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card text-center border-primary">
+                <div class="card-body py-3">
+                    <div class="display-6 text-primary fw-bold">@ActivePolicyCount</div>
+                    <div class="small text-muted">
+                        @if (_filterApplied)
+                        {
+                            <span>Policies after filter</span>
+                        }
+                        else
+                        {
+                            <span>Unique policies</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body py-3">
+                    <div class="display-6 text-success fw-bold">@_result.Statistics.DuplicatesRemoved</div>
+                    <div class="small text-muted">Duplicates removed</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning">
+                <div class="card-body py-3">
+                    <div class="display-6 text-warning fw-bold">@_result.Statistics.ParameterConflictsFound</div>
+                    <div class="small text-muted">Conflicts found</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-info">
+                <div class="card-body py-3">
+                    <div class="display-6 text-info fw-bold">@_result.SourceInitiatives.Count</div>
+                    <div class="small text-muted">Initiatives combined</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sources table -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold bg-body-secondary">
+            <i class="bi bi-table me-2"></i>Sources
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-active">
+                    <tr>
+                        <th>Framework</th>
+                        <th>Display Name</th>
+                        <th class="text-end">Policies</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var source in _result.SourceInitiatives)
+                    {
+                        <tr>
+                            <td><span class="badge bg-primary">@source.Key</span></td>
+                            <td class="small text-muted">@source.DisplayName</td>
+                            <td class="text-end">@source.PolicyCount</td>
+                        </tr>
+                    }
+                    <tr class="table-active fw-bold">
+                        <td colspan="2">Total after merge</td>
+                        <td class="text-end">@_result.Statistics.UniquePoliciesAfterMerge</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Changes diff (only visible when the JSON has been modified) -->
+    @if (_filteredJson is not null && CurrentDiff.HasChanges)
+    {
+        <div class="card shadow-sm mb-4 border-info-subtle">
+            <div class="card-header fw-semibold bg-body-secondary d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-arrows-collapse me-2 text-info"></i>Changes applied
+                    <span class="badge bg-info ms-2 text-dark">
+                        @(CurrentDiff.RemovedPolicies.Count + CurrentDiff.AddedPolicies.Count + CurrentDiff.RemovedParameters.Count + CurrentDiff.AddedParameters.Count + CurrentDiff.ChangedParameters.Count) changes
+                    </span>
+                </span>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _showDiff = !_showDiff">
+                    <i class="bi bi-chevron-@(_showDiff ? "up" : "down")"></i>
+                </button>
+            </div>
+            @if (_showDiff)
+            {
+                <div class="card-body small">
+                    <div class="row g-3">
+
+                        @if (CurrentDiff.RemovedPolicies.Count > 0)
+                        {
+                            <div class="col-md-6">
+                                <h6 class="text-danger mb-2">
+                                    <i class="bi bi-dash-circle me-1"></i>@CurrentDiff.RemovedPolicies.Count policies removed
+                                </h6>
+                                <div style="max-height:160px; overflow-y:auto;">
+                                    <ul class="list-unstyled mb-0">
+                                        @foreach (var id in CurrentDiff.RemovedPolicies)
+                                        {
+                                            <li class="font-monospace text-muted text-truncate" style="font-size:0.72rem" title="@id">
+                                                <i class="bi bi-dash text-danger me-1"></i>@id.Split('/').Last()
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                        }
+
+                        @if (CurrentDiff.RemovedParameters.Count > 0)
+                        {
+                            <div class="col-md-6">
+                                <h6 class="text-danger mb-2">
+                                    <i class="bi bi-dash-circle me-1"></i>@CurrentDiff.RemovedParameters.Count parameters removed
+                                </h6>
+                                <div style="max-height:160px; overflow-y:auto;">
+                                    <ul class="list-unstyled mb-0">
+                                        @foreach (var p in CurrentDiff.RemovedParameters)
+                                        {
+                                            <li class="font-monospace text-muted" style="font-size:0.72rem">
+                                                <i class="bi bi-dash text-danger me-1"></i>@p
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                        }
+
+                        @if (CurrentDiff.AddedParameters.Count > 0)
+                        {
+                            <div class="col-md-6">
+                                <h6 class="text-success mb-2">
+                                    <i class="bi bi-plus-circle me-1"></i>@CurrentDiff.AddedParameters.Count parameters added
+                                </h6>
+                                <div style="max-height:160px; overflow-y:auto;">
+                                    <ul class="list-unstyled mb-0">
+                                        @foreach (var p in CurrentDiff.AddedParameters)
+                                        {
+                                            <li class="font-monospace text-muted" style="font-size:0.72rem">
+                                                <i class="bi bi-plus text-success me-1"></i>@p
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                        }
+
+                        @if (CurrentDiff.ChangedParameters.Count > 0)
+                        {
+                            <div class="col-12">
+                                <h6 class="text-warning-emphasis mb-2">
+                                    <i class="bi bi-pencil me-1"></i>@CurrentDiff.ChangedParameters.Count parameter values changed
+                                </h6>
+                                <div style="max-height:200px; overflow-y:auto;">
+                                    <table class="table table-sm mb-0" style="font-size:0.75rem;">
+                                        <thead class="table-active">
+                                            <tr>
+                                                <th>Parameter</th>
+                                                <th>Before</th>
+                                                <th>After</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var cp in CurrentDiff.ChangedParameters)
+                                            {
+                                                @if (cp.DefaultValueChanged)
+                                                {
+                                                    <tr>
+                                                        <td class="font-monospace">@cp.Name</td>
+                                                        <td class="text-danger font-monospace">@(cp.OldDefaultValue ?? "(none)")</td>
+                                                        <td class="text-success font-monospace">@(cp.NewDefaultValue ?? "(none)")</td>
+                                                    </tr>
+                                                }
+                                                @if (cp.AllowedValuesChanged)
+                                                {
+                                                    <tr>
+                                                        <td class="font-monospace text-muted">@cp.Name <span class="badge bg-secondary">allowedValues</span></td>
+                                                        <td class="text-danger font-monospace">@(cp.OldAllowedValues ?? "(any)")</td>
+                                                        <td class="text-success font-monospace">@(cp.NewAllowedValues ?? "(any)")</td>
+                                                    </tr>
+                                                }
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        }
+
+                        @if (CurrentDiff.RemovedGroupsCount > 0)
+                        {
+                            <div class="col-12">
+                                <span class="text-muted">
+                                    <i class="bi bi-dash-circle text-danger me-1"></i>@CurrentDiff.RemovedGroupsCount control group@(CurrentDiff.RemovedGroupsCount == 1 ? "" : "s") removed
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Validation warnings -->
+    @if (_result.Warnings.Count > 0)
+    {
+        <div class="mb-4">
+            @foreach (var w in _result.Warnings)
+            {
+                var (alertClass, icon) = w.Severity switch
+                {
+                    MergeWarningSeverity.Error   => ("alert-danger",  "bi-x-circle"),
+                    MergeWarningSeverity.Warning => ("alert-warning", "bi-exclamation-triangle"),
+                    _                            => ("alert-info",    "bi-info-circle")
+                };
+                <div class="alert @alertClass d-flex align-items-start gap-2 py-2 px-3 mb-2">
+                    <i class="bi @icon mt-1 flex-shrink-0"></i>
+                    <span class="small">
+                        <strong class="font-monospace me-1" style="font-size:0.7rem;">[@w.Code]</strong>
+                        @w.Message
+                    </span>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Filter controls -->
+    @if (_result.MergedGroups.Count > 0)
+    {
+        <div class="card shadow-sm mb-4">
+            <div class="card-header fw-semibold bg-body-secondary d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-funnel me-2"></i>Filter controls
+                    <span class="badge bg-secondary ms-2">@_selectedGroups.Count / @_result.MergedGroups.Count controls</span>
+                    <span class="badge bg-primary ms-1">@FilteredPolicyCount policies</span>
+                    @if (_filterApplied)
+                    {
+                        <span class="badge bg-success ms-1"><i class="bi bi-check me-1"></i>Applied</span>
+                    }
+                </span>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _showFilter = !_showFilter">
+                    <i class="bi bi-chevron-@(_showFilter ? "up" : "down")"></i>
+                </button>
+            </div>
+
+            @if (_showFilter)
+            {
+                <div class="card-body">
+                    <input class="form-control form-control-sm mb-3"
+                           placeholder="Search controls..."
+                           @bind="_groupFilter" @bind:event="oninput" />
+
+                    @foreach (var sourceKey in _result.MergedGroups.Select(g => g.SourceInitiativeKey).Distinct())
+                    {
+                        var visibleGroups = _result.MergedGroups
+                            .Where(g => g.SourceInitiativeKey == sourceKey)
+                            .Where(g => string.IsNullOrWhiteSpace(_groupFilter)
+                                || (g.DisplayName ?? g.Name).Contains(_groupFilter, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+                        if (visibleGroups.Count == 0) continue;
+
+                        <div class="mb-4">
+                            <div class="d-flex align-items-center mb-2 gap-2">
+                                <span class="badge bg-primary">@sourceKey</span>
+                                <span class="text-muted small flex-grow-1">@visibleGroups.Count controls</span>
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none"
+                                        @onclick="() => SelectAllForSource(sourceKey)">All</button>
+                                <span class="text-muted small">|</span>
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none"
+                                        @onclick="() => DeselectAllForSource(sourceKey)">None</button>
+                            </div>
+                            <div class="row g-1" style="max-height:220px; overflow-y:auto;">
+                                @foreach (var group in visibleGroups)
+                                {
+                                    var gName = group.Name;
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check form-check-sm">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="grp_@gName.Replace(' ','_')"
+                                                   checked="@_selectedGroups.Contains(gName)"
+                                                   @onchange="() => ToggleGroup(gName)" />
+                                            <label class="form-check-label small text-truncate d-block"
+                                                   for="grp_@gName.Replace(' ','_')"
+                                                   title="@gName — @group.DisplayName">
+                                                @(group.DisplayName ?? group.Name)
+                                                <span class="text-muted">(@group.PolicyCount)</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @{
+                        var ungroupedCount = _result.MergedPolicies.Count(p => p.GroupNames is null || p.GroupNames.Count == 0);
+                    }
+                    @if (ungroupedCount > 0)
+                    {
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="ungrouped" @bind="_includeUngrouped" />
+                            <label class="form-check-label small" for="ungrouped">
+                                Uncategorised
+                                <span class="text-muted">(@ungroupedCount policies without a control mapping)</span>
+                            </label>
+                        </div>
+                    }
+
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-primary btn-sm" @onclick="ApplyFilter">
+                            <i class="bi bi-funnel-fill me-1"></i>Apply
+                            <span class="badge bg-body-secondary text-dark ms-1">@FilteredPolicyCount policies</span>
+                        </button>
+                        @if (_filterApplied)
+                        {
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="ResetFilter">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Parameter Aliases -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold bg-body-secondary d-flex justify-content-between align-items-center">
+            <span>
+                <i class="bi bi-link-45deg me-2"></i>Parameter Aliases
+                @if (_aliases.Count > 0)
+                {
+                    <span class="badge bg-info ms-2">@_aliases.Count(a => a.IsApproved) / @_aliases.Count suggested</span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary ms-2">0 detected</span>
+                }
+                @if (_aliasesApplied)
+                {
+                    <span class="badge bg-success ms-1"><i class="bi bi-check me-1"></i>Applied</span>
+                }
+            </span>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _showAliases = !_showAliases">
+                <i class="bi bi-chevron-@(_showAliases ? "up" : "down")"></i>
+            </button>
+        </div>
+
+        @if (_showAliases)
+        {
+            <div class="card-body">
+                @if (_aliases.Count == 0)
+                {
+                    <p class="small text-muted mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        No alias candidates detected. The built-in Microsoft frameworks use unique parameter names per initiative.
+                        Aliases are suggested automatically when you merge <strong>custom initiatives</strong> that use different names
+                        for the same parameter (e.g. <code>allowedLocations</code> vs <code>listOfAllowedLocations</code>).
+                    </p>
+                }
+                else
+                {
+                    <p class="small text-muted mb-3">
+                        The following parameters appear under different names across frameworks but represent the same value.
+                        Merging them means you only need to configure each value <strong>once</strong> when assigning the initiative.
+                    </p>
+
+                    @foreach (var alias in _aliases)
+                    {
+                        <div class="d-flex align-items-start gap-3 mb-3 p-2 rounded border @(alias.IsApproved ? "border-info-subtle" : "border-secondary-subtle") @(alias.IsApproved ? "" : "opacity-50")">
+                            <div class="form-check mt-1 flex-shrink-0">
+                                <input class="form-check-input" type="checkbox"
+                                       checked="@alias.IsApproved"
+                                       @onchange="() => alias.IsApproved = !alias.IsApproved" />
+                            </div>
+                            <div class="flex-grow-1 min-width-0">
+                                <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                                    <span class="badge bg-secondary">@alias.Candidate.Type</span>
+                                    <input class="form-control form-control-sm font-monospace"
+                                           style="max-width:300px;"
+                                           value="@alias.CanonicalName"
+                                           disabled="@(!alias.IsApproved)"
+                                           @onchange="e => alias.CanonicalName = e.Value?.ToString() ?? alias.CanonicalName" />
+                                    <span class="text-muted small">← canonical name</span>
+                                </div>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var original in alias.Candidate.OriginalNames)
+                                    {
+                                        <span class="badge font-monospace small @(original.Equals(alias.CanonicalName, StringComparison.OrdinalIgnoreCase) ? "bg-primary" : "bg-secondary bg-opacity-75")">
+                                            @original
+                                        </span>
+                                    }
+                                </div>
+                                @if (alias.Candidate.DisplayName is not null)
+                                {
+                                    <div class="text-muted small mt-1">@alias.Candidate.DisplayName</div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div class="d-flex align-items-center gap-3 mt-2">
+                        @{var approvedCount = _aliases.Count(a => a.IsApproved);}
+                        <button class="btn btn-info btn-sm text-white"
+                                @onclick="ApplyAliasesAction"
+                                disabled="@(approvedCount == 0)">
+                            <i class="bi bi-link-45deg me-1"></i>Apply @approvedCount alias@(approvedCount == 1 ? "" : "es")
+                        </button>
+                        @if (_aliasesApplied)
+                        {
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="ResetAliasesAction">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                            </button>
+                            <span class="text-success small"><i class="bi bi-check-circle me-1"></i>@approvedCount alias@(approvedCount == 1 ? "" : "es") applied</span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Conflicts -->
+    @if (_result.Conflicts.Count > 0)
+    {
+        <div class="card shadow-sm mb-4">
+            <div class="card-header fw-semibold bg-body-secondary">
+                <i class="bi bi-exclamation-triangle me-2 text-warning"></i>
+                Parameter conflicts (@_result.Conflicts.Count)
+            </div>
+            <div class="card-body p-0">
+                <div class="accordion accordion-flush" id="conflictsAccordion">
+                    @for (int i = 0; i < _result.Conflicts.Count; i++)
+                    {
+                        var conflict = _result.Conflicts[i];
+                        var itemId = $"conflict-{i}";
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed py-2" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#@itemId">
+                                    <span class="badge @(conflict.IsAutoResolved ? "bg-success" : "bg-danger") me-2">
+                                        @(conflict.IsAutoResolved ? "Resolved" : "Manual")
+                                    </span>
+                                    <span>
+                                        <strong>@(conflict.DisplayName ?? conflict.ParameterName)</strong>
+                                        @if (conflict.DisplayName is not null)
+                                        {
+                                            <span class="text-muted ms-2 small font-monospace">@conflict.ParameterName</span>
+                                        }
+                                        <span class="text-muted ms-2 small">(@conflict.Type)</span>
+                                    </span>
+                                </button>
+                            </h2>
+                            <div id="@itemId" class="accordion-collapse collapse">
+                                <div class="accordion-body small">
+                                    <p class="text-muted">@conflict.Description</p>
+                                    <dl class="row mb-1">
+                                        @foreach (var (initiative, value) in conflict.ConflictingValues)
+                                        {
+                                            <dt class="col-sm-4">@initiative</dt>
+                                            <dd class="col-sm-8 font-monospace">@(value?.ToString() ?? "(null)")</dd>
+                                        }
+                                    </dl>
+                                    <div class="alert alert-sm alert-@(conflict.IsAutoResolved ? "success" : "warning") py-1 mb-0">
+                                        <strong>Resolution:</strong> @conflict.ResolutionDescription
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Deployment result -->
+    @if (_result.Deployment is not null)
+    {
+        var dep = _result.Deployment;
+        var hasError = dep.ErrorMessage is not null;
+        <div class="card shadow-sm mb-4 border-@(dep.Success ? (hasError ? "warning" : "success") : "danger")">
+            <div class="card-header fw-semibold bg-body-secondary">
+                <i class="bi bi-cloud-@(dep.Success ? "check" : "x") me-2 text-@(dep.Success ? (hasError ? "warning" : "success") : "danger")"></i>
+                Deployment @(dep.Success ? "successful" : "failed")
+            </div>
+            <div class="card-body small">
+                @if (dep.Success)
+                {
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Scope</dt>
+                        <dd class="col-sm-8"><code>@dep.Scope</code></dd>
+                        <dt class="col-sm-4">Initiative definition</dt>
+                        <dd class="col-sm-8 font-monospace text-truncate" title="@dep.DeployedResourceId">@dep.DeployedResourceId</dd>
+                        @if (dep.AssignmentCreated && dep.AssignmentId is not null)
+                        {
+                            <dt class="col-sm-4">Policy assignment</dt>
+                            <dd class="col-sm-8 font-monospace text-truncate" title="@dep.AssignmentId">@dep.AssignmentId</dd>
+                        }
+                    </dl>
+                    @if (dep.AssignmentCreated)
+                    {
+                        <div class="alert alert-success py-2 px-3 mt-3 mb-0 small">
+                            <i class="bi bi-shield-check me-2"></i>
+                            The initiative has been assigned to the scope and will shortly appear in
+                            <strong>Microsoft Defender for Cloud → Regulatory Compliance → Manage compliance standards</strong>.
+                        </div>
+                    }
+                    @if (hasError)
+                    {
+                        <div class="alert alert-warning py-2 px-3 mt-3 mb-0 small">
+                            <i class="bi bi-exclamation-triangle me-2"></i>@dep.ErrorMessage
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="mb-0 text-danger">@dep.ErrorMessage</p>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Parameter Values -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold bg-body-secondary d-flex justify-content-between align-items-center">
+            <span>
+                <i class="bi bi-sliders me-2"></i>Parameter Values
+                <span class="badge bg-secondary ms-2">@_paramVms.Count parameters</span>
+                @if (_paramEditsApplied)
+                {
+                    <span class="badge bg-success ms-2"><i class="bi bi-check me-1"></i>Applied</span>
+                }
+                @if (_paramVms.Any(p => p.HasChanges))
+                {
+                    <span class="badge bg-warning text-dark ms-2">@_paramVms.Count(p => p.HasChanges) edited</span>
+                }
+            </span>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _showParams = !_showParams">
+                <i class="bi bi-chevron-@(_showParams ? "up" : "down")"></i>
+            </button>
+        </div>
+
+        @if (_showParams)
+        {
+            <div class="card-body">
+                <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                    <input class="form-control form-control-sm" style="max-width:280px;"
+                           type="search" placeholder="Search parameters..."
+                           @bind="_paramFilter" @bind:event="oninput" />
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="onlyUnset"
+                               @bind="_showOnlyUnset" />
+                        <label class="form-check-label small" for="onlyUnset">Only unset parameters</label>
+                    </div>
+                    <span class="text-muted small ms-auto">@VisibleParams.Count shown</span>
+                </div>
+
+                @if (_paramVms.Count == 0)
+                {
+                    <p class="text-muted small mb-0">
+                        <i class="bi bi-info-circle me-1"></i>No parameters found in the current JSON.
+                    </p>
+                }
+                else if (VisibleParams.Count == 0)
+                {
+                    <p class="text-muted small mb-0">No parameters match the current filter.</p>
+                }
+                else
+                {
+                    <div style="max-height: 440px; overflow-y: auto;">
+                        <table class="table table-sm table-hover align-middle mb-2">
+                            <thead class="table-active sticky-top">
+                                <tr>
+                                    <th style="width:30%">Parameter</th>
+                                    <th style="width:8%">Type</th>
+                                    <th style="width:31%">Default value <span class="text-muted fw-normal small">(leave blank to keep current)</span></th>
+                                    <th style="width:31%">Allowed values <span class="text-muted fw-normal small">(one per line)</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in VisibleParams)
+                                {
+                                    <tr class="@(p.HasChanges ? "table-warning" : "")">
+                                        <td>
+                                            <span class="font-monospace small d-block text-truncate" style="max-width:220px;" title="@p.Name">@p.Name</span>
+                                            @if (p.DisplayName is not null)
+                                            {
+                                                <span class="text-muted" style="font-size:0.72rem">@p.DisplayName</span>
+                                            }
+                                        </td>
+                                        <td><span class="badge bg-secondary" style="font-size:0.7rem">@p.Type</span></td>
+                                        <td>
+                                            <input class="form-control form-control-sm font-monospace"
+                                                   style="font-size:0.78rem"
+                                                   placeholder="@(p.OriginalDefaultValue ?? "(not set)")"
+                                                   value="@p.DefaultValueText"
+                                                   @oninput="e => { p.DefaultValueText = e.Value?.ToString() ?? string.Empty; p.DefaultValueChanged = true; }" />
+                                        </td>
+                                        <td>
+                                            <textarea class="form-control form-control-sm font-monospace"
+                                                      style="font-size:0.78rem; min-height:32px; resize:vertical;"
+                                                      placeholder="@(p.OriginalAllowedValues ?? "(any)")"
+                                                      value="@p.AllowedValuesText"
+                                                      @oninput="e => { p.AllowedValuesText = e.Value?.ToString() ?? string.Empty; p.AllowedValuesChanged = true; }"
+                                                      rows="1"></textarea>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 mt-2">
+                        <button class="btn btn-primary btn-sm"
+                                @onclick="ApplyParameterValuesAction"
+                                disabled="@(!_paramVms.Any(p => p.HasChanges))">
+                            <i class="bi bi-check2-circle me-1"></i>Apply overrides
+                        </button>
+                        @if (_paramEditsApplied)
+                        {
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="ResetParameterValues">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                            </button>
+                        }
+                        <span class="text-muted small ms-2">Changes are applied to the JSON below and can be downloaded.</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Generated JSON -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold bg-body-secondary d-flex justify-content-between align-items-center">
+            <span>
+                <i class="bi bi-code-slash me-2"></i>Generated Initiative JSON
+                @if (_filterApplied)
+                {
+                    <span class="badge bg-success ms-2">Filtered</span>
+                }
+            </span>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="CopyJson">
+                <i class="bi bi-clipboard me-1"></i>Copy
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <pre class="m-0 p-3 bg-dark text-light rounded-bottom"
+                 style="max-height: 500px; overflow-y: auto; font-size: 0.8rem;">@DisplayJson</pre>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-5 flex-wrap">
+        <a href="/" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-left me-2"></i>New merge
+        </a>
+        <button class="btn btn-success" @onclick="DownloadJson">
+            <i class="bi bi-download me-2"></i>Download as JSON
+        </button>
+        <button class="btn btn-outline-success" @onclick="DownloadBicep" title="Download as a Bicep resource definition for az deployment sub create">
+            <i class="bi bi-download me-2"></i>Download as Bicep
+        </button>
+        <button class="btn btn-outline-primary" @onclick="DownloadAssignment" title="Download a Bicep template that creates the initiative definition AND assigns it to a scope">
+            <i class="bi bi-download me-2"></i>Download assignment template
+        </button>
+    </div>
+}
+
+@code {
+    private MergeResult? _result;
+    private string? _filteredJson;
+    private bool _filterApplied;
+    private bool _showFilter;
+    private HashSet<string> _selectedGroups = new(StringComparer.OrdinalIgnoreCase);
+    private bool _includeUngrouped = true;
+    private string _groupFilter = string.Empty;
+    private List<AliasViewModel> _aliases = [];
+    private bool _aliasesApplied;
+    private bool _showAliases = true;
+
+    // Diff state
+    private bool _showDiff = true;
+
+    // Parameter value editor state
+    private List<ParamViewModel> _paramVms = [];
+    private bool _showParams;
+    private bool _paramEditsApplied;
+    private string _paramFilter = string.Empty;
+    private bool _showOnlyUnset = true;
+
+    private sealed class AliasViewModel
+    {
+        public required ParameterAliasCandidate Candidate { get; init; }
+        public string CanonicalName { get; set; } = string.Empty;
+        public bool IsApproved { get; set; } = true;
+    }
+
+    private sealed class ParamViewModel
+    {
+        public string Name { get; init; } = string.Empty;
+        public string Type { get; init; } = string.Empty;
+        public string? DisplayName { get; init; }
+        public string? OriginalDefaultValue { get; init; }   // current value in JSON (display as placeholder)
+        public string? OriginalAllowedValues { get; init; }  // current allowed values (display as placeholder)
+        public bool HasOriginalDefault { get; init; }
+        public string DefaultValueText { get; set; } = string.Empty;
+        public bool DefaultValueChanged { get; set; }
+        public string AllowedValuesText { get; set; } = string.Empty;
+        public bool AllowedValuesChanged { get; set; }
+        public bool HasChanges => DefaultValueChanged || AllowedValuesChanged;
+    }
+
+    protected override void OnInitialized()
+    {
+        _result = MergeResultCache.Get();
+        if (_result?.MergedGroups is { Count: > 0 } groups)
+            _selectedGroups = groups.Select(g => g.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (_result?.SuggestedAliases is { Count: > 0 } aliases)
+            _aliases = aliases.Select(a => new AliasViewModel
+            {
+                Candidate = a,
+                CanonicalName = a.CanonicalName,
+                IsApproved = true
+            }).ToList();
+        if (_result?.GeneratedJson is not null)
+            _paramVms = ParseParamViewModels(_result.GeneratedJson);
+    }
+
+    private static List<ParamViewModel> ParseParamViewModels(string json)
+    {
+        try
+        {
+            var root = JsonNode.Parse(json) as JsonObject;
+            var props = (root?["properties"] as JsonObject) ?? root;
+            var paramsNode = props?["parameters"] as JsonObject;
+            if (paramsNode is null) return [];
+
+            return paramsNode
+                .Select(kv =>
+                {
+                    var paramObj = kv.Value as JsonObject;
+                    var type = paramObj?["type"]?.GetValue<string>() ?? "String";
+                    var meta = paramObj?["metadata"] as JsonObject;
+                    var displayName = meta?["displayName"]?.GetValue<string>();
+                    var defaultNode = paramObj?["defaultValue"];
+                    var allowedNode = paramObj?["allowedValues"] as JsonArray;
+
+                    string? defaultText = defaultNode?.ToJsonString();
+                    // Strip surrounding quotes for simple strings
+                    if (defaultText is not null && defaultText.StartsWith('"') && defaultText.EndsWith('"'))
+                        defaultText = JsonSerializer.Deserialize<string>(defaultText);
+
+                    string? allowedText = allowedNode is null ? null :
+                        string.Join("\n", allowedNode.Select(v =>
+                        {
+                            var s = v?.ToJsonString() ?? "";
+                            return s.StartsWith('"') && s.EndsWith('"') ? JsonSerializer.Deserialize<string>(s) ?? s : s;
+                        }));
+
+                    return new ParamViewModel
+                    {
+                        Name = kv.Key,
+                        Type = type,
+                        DisplayName = displayName,
+                        OriginalDefaultValue = defaultText,
+                        OriginalAllowedValues = allowedText,
+                        HasOriginalDefault = defaultNode is not null
+                    };
+                })
+                .OrderBy(p => p.HasOriginalDefault)   // unset first
+                .ThenBy(p => p.Name)
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private List<ParamViewModel> VisibleParams => _paramVms
+        .Where(p => (string.IsNullOrWhiteSpace(_paramFilter) ||
+                     p.Name.Contains(_paramFilter, StringComparison.OrdinalIgnoreCase) ||
+                     (p.DisplayName?.Contains(_paramFilter, StringComparison.OrdinalIgnoreCase) ?? false))
+                  && (!_showOnlyUnset || !p.HasOriginalDefault))
+        .ToList();
+
+    private string DisplayJson => _filteredJson ?? _result?.GeneratedJson ?? string.Empty;
+
+    private InitiativeDiff CurrentDiff => _result is null || _filteredJson is null
+        ? new InitiativeDiff()
+        : MergerService.ComputeDiff(_result.GeneratedJson ?? string.Empty, _filteredJson);
+
+    private int ActivePolicyCount => _filterApplied
+        ? CountMatchingPolicies()
+        : (_result?.Statistics.UniquePoliciesAfterMerge ?? 0);
+
+    private int FilteredPolicyCount => CountMatchingPolicies();
+
+    private int CountMatchingPolicies()
+    {
+        if (_result is null) return 0;
+        return _result.MergedPolicies.Count(p =>
+        {
+            if (p.GroupNames is null || p.GroupNames.Count == 0) return _includeUngrouped;
+            return p.GroupNames.Any(g => _selectedGroups.Contains(g));
+        });
+    }
+
+    private void ToggleGroup(string name)
+    {
+        if (!_selectedGroups.Remove(name))
+            _selectedGroups.Add(name);
+    }
+
+    private void SelectAllForSource(string sourceKey)
+    {
+        if (_result is null) return;
+        foreach (var g in _result.MergedGroups.Where(g => g.SourceInitiativeKey == sourceKey))
+            _selectedGroups.Add(g.Name);
+    }
+
+    private void DeselectAllForSource(string sourceKey)
+    {
+        if (_result is null) return;
+        foreach (var g in _result.MergedGroups.Where(g => g.SourceInitiativeKey == sourceKey))
+            _selectedGroups.Remove(g.Name);
+    }
+
+    private void ApplyFilter()
+    {
+        if (_result is null) return;
+        _filteredJson = MergerService.FilterByGroups(_result, _selectedGroups, _includeUngrouped);
+        _filterApplied = true;
+    }
+
+    private void ResetFilter()
+    {
+        _filteredJson = null;
+        _filterApplied = false;
+        if (_result?.MergedGroups is { Count: > 0 } groups)
+            _selectedGroups = groups.Select(g => g.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void ApplyAliasesAction()
+    {
+        if (_result is null) return;
+        var approved = _aliases
+            .Where(a => a.IsApproved && !string.IsNullOrWhiteSpace(a.CanonicalName))
+            .Select(a => new ParameterAliasCandidate
+            {
+                CanonicalName = a.CanonicalName.Trim(),
+                Type = a.Candidate.Type,
+                DisplayName = a.Candidate.DisplayName,
+                OriginalNames = a.Candidate.OriginalNames,
+                Definition = a.Candidate.Definition
+            })
+            .ToList();
+
+        var baseJson = _filteredJson ?? _result.GeneratedJson ?? string.Empty;
+        _filteredJson = MergerService.ApplyAliases(baseJson, approved);
+        _aliasesApplied = true;
+    }
+
+    private void ResetAliasesAction()
+    {
+        _aliasesApplied = false;
+        // Re-apply group filter if active, otherwise revert to original JSON
+        if (_result is not null && _filterApplied)
+            _filteredJson = MergerService.FilterByGroups(_result, _selectedGroups, _includeUngrouped);
+        else
+            _filteredJson = null;
+        // Reset editable state
+        foreach (var a in _aliases)
+        {
+            a.CanonicalName = a.Candidate.CanonicalName;
+            a.IsApproved = true;
+        }
+    }
+
+    private void ApplyParameterValuesAction()
+    {
+        if (_result is null) return;
+        var changes = _paramVms.Where(p => p.HasChanges).ToList();
+        if (changes.Count == 0) return;
+
+        var overrides = changes.ToDictionary(
+            p => p.Name,
+            p =>
+            {
+                var ov = new ParameterValueOverride();
+                if (p.DefaultValueChanged)
+                {
+                    ov.UpdateDefaultValue = true;
+                    ov.DefaultValueJson = string.IsNullOrWhiteSpace(p.DefaultValueText)
+                        ? null
+                        : (p.Type.Equals("String", StringComparison.OrdinalIgnoreCase)
+                           ? JsonSerializer.Serialize(p.DefaultValueText.Trim())  // wrap in quotes
+                           : p.DefaultValueText.Trim());
+                }
+                if (p.AllowedValuesChanged)
+                {
+                    ov.UpdateAllowedValues = true;
+                    ov.AllowedValues = string.IsNullOrWhiteSpace(p.AllowedValuesText)
+                        ? null
+                        : p.AllowedValuesText
+                            .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .Where(v => !string.IsNullOrWhiteSpace(v))
+                            .ToList();
+                }
+                return ov;
+            });
+
+        var baseJson = _filteredJson ?? _result.GeneratedJson ?? string.Empty;
+        _filteredJson = MergerService.ApplyParameterValues(baseJson, overrides);
+        _paramEditsApplied = true;
+        // Refresh the view models from the updated JSON
+        _paramVms = ParseParamViewModels(_filteredJson);
+    }
+
+    private void ResetParameterValues()
+    {
+        _paramEditsApplied = false;
+        // Re-apply earlier transformations if they were active
+        if (_result is null) return;
+        var baseJson = _result.GeneratedJson ?? string.Empty;
+        if (_filterApplied)
+            baseJson = MergerService.FilterByGroups(_result, _selectedGroups, _includeUngrouped);
+        if (_aliasesApplied)
+        {
+            var approved = _aliases
+                .Where(a => a.IsApproved && !string.IsNullOrWhiteSpace(a.CanonicalName))
+                .Select(a => new ParameterAliasCandidate
+                {
+                    CanonicalName = a.CanonicalName.Trim(),
+                    Type = a.Candidate.Type,
+                    DisplayName = a.Candidate.DisplayName,
+                    OriginalNames = a.Candidate.OriginalNames,
+                    Definition = a.Candidate.Definition
+                })
+                .ToList();
+            baseJson = MergerService.ApplyAliases(baseJson, approved);
+        }
+        _filteredJson = _filterApplied || _aliasesApplied ? baseJson : null;
+        _paramVms = ParseParamViewModels(_filteredJson ?? _result.GeneratedJson ?? string.Empty);
+    }
+
+    private async Task CopyJson()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", DisplayJson);
+    }
+
+    private string Slugify(string name) =>
+        System.Text.RegularExpressions.Regex
+            .Replace(name.ToLowerInvariant(), @"[^a-z0-9]+", "-")
+            .Trim('-');
+
+    private async Task DownloadJson()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(DisplayJson);
+        var stream = new MemoryStream(bytes);
+        var slug = Slugify(_result?.InitiativeName ?? "initiative");
+        await JS.InvokeVoidAsync("downloadStream", $"{slug}.json", new DotNetStreamReference(stream));
+    }
+
+    private async Task DownloadBicep()
+    {
+        var bicep = MergerService.ConvertToBicep(DisplayJson);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(bicep);
+        var stream = new MemoryStream(bytes);
+        var slug = Slugify(_result?.InitiativeName ?? "initiative");
+        await JS.InvokeVoidAsync("downloadStream", $"{slug}.bicep", new DotNetStreamReference(stream));
+    }
+
+    private async Task DownloadAssignment()
+    {
+        var bicep = MergerService.GenerateAssignmentTemplate(DisplayJson);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(bicep);
+        var stream = new MemoryStream(bytes);
+        var slug = Slugify(_result?.InitiativeName ?? "initiative");
+        await JS.InvokeVoidAsync("downloadStream", $"{slug}-assignment.bicep", new DotNetStreamReference(stream));
+    }
+}
