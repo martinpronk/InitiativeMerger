@@ -26,3 +26,6 @@ wwwroot/_framework/
 appsettings.Development.json
 *.pfx
 *.key
+
+# AI files
+.claude/
