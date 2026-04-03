@@ -300,12 +300,9 @@ Additional initiatives can be added via **Step 2** in the UI or `--ids` in the C
 
 ## Contributing
 
-Pull requests are welcome. Please open an issue first to discuss major changes.
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide on forking the repository, creating a feature branch and submitting a pull request.
 
 ```bash
-# Run tests (once a test project has been added)
-dotnet test
-
 # Build for all platforms
 dotnet publish src/InitiativeMerger.Cli -r linux-x64 --self-contained -o publish/linux
 dotnet publish src/InitiativeMerger.Cli -r win-x64 --self-contained -o publish/windows
