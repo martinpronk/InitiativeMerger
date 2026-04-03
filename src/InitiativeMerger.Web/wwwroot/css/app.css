@@ -1,38 +1,229 @@
 /* Initiative Merger - Applicatie stijlen */
 
-/* Basislettertype iets groter voor betere leesbaarheid */
+/* ── Typografie ─────────────────────────────────────────────────────────── */
+
 body {
     font-size: 1rem;
     line-height: 1.6;
 }
 
-/* Verbeterd contrast voor muted tekst in dark mode */
-[data-bs-theme="dark"] .text-muted,
-[data-bs-theme="dark"] .text-secondary {
-    color: rgba(255, 255, 255, 0.72) !important;
-}
-
-/* Kleine tekst nooit kleiner dan 0.8rem */
 .small, small {
     font-size: 0.8125rem !important;
 }
 
-/* Code/JSON weergave */
+/* ── Dark mode: kleurpalet ──────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] {
+    --bs-body-bg:            #0d1b2a;
+    --bs-body-color:         #e2e8f0;
+    --bs-card-bg:            #162032;
+    --bs-card-border-color:  rgba(56, 189, 248, 0.12);
+    --bs-border-color:       rgba(56, 189, 248, 0.15);
+    --bs-secondary-color:    rgba(226, 232, 240, 0.72);
+    --bs-primary:            #38bdf8;
+    --bs-primary-rgb:        56, 189, 248;
+    --bs-link-color:         #38bdf8;
+    --bs-link-hover-color:   #7dd3fc;
+    --bs-secondary-bg:       #1e2e42;
+    --bs-tertiary-bg:        #1a2838;
+}
+
+/* ── Dark mode: muted tekst ─────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .text-muted,
+[data-bs-theme="dark"] .text-secondary {
+    color: rgba(226, 232, 240, 0.72) !important;
+}
+
+/* ── Dark mode: navbar ──────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .navbar.bg-primary {
+    background: linear-gradient(135deg, #0a1628 0%, #0d2444 100%) !important;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+}
+
+[data-bs-theme="dark"] .navbar-brand {
+    color: #38bdf8 !important;
+    letter-spacing: 0.01em;
+}
+
+/* ── Dark mode: cards ───────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .card {
+    background-color: #162032;
+    border-color: rgba(56, 189, 248, 0.12);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-bs-theme="dark"] .card-header {
+    background-color: rgba(56, 189, 248, 0.07) !important;
+    border-bottom-color: rgba(56, 189, 248, 0.15);
+    color: #bae6fd;
+    font-weight: 600;
+}
+
+[data-bs-theme="dark"] .card-header .bi {
+    color: #38bdf8;
+}
+
+/* ── Dark mode: framework selectie kaarten ──────────────────────────────── */
+
+[data-bs-theme="dark"] .card.border-primary {
+    border-color: #38bdf8 !important;
+    background-color: rgba(56, 189, 248, 0.08) !important;
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3), 0 4px 16px rgba(56, 189, 248, 0.1);
+}
+
+/* ── Dark mode: alerts ──────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .alert-success {
+    background-color: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+}
+
+[data-bs-theme="dark"] .alert-warning {
+    background-color: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #fcd34d;
+}
+
+[data-bs-theme="dark"] .alert-danger {
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+[data-bs-theme="dark"] .alert-info {
+    background-color: rgba(56, 189, 248, 0.1);
+    border-color: rgba(56, 189, 248, 0.25);
+    color: #bae6fd;
+}
+
+/* ── Dark mode: formulierelementen ──────────────────────────────────────── */
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #0d1b2a;
+    border-color: rgba(56, 189, 248, 0.2);
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 0.2rem rgba(56, 189, 248, 0.2);
+    background-color: #0d1b2a;
+}
+
+/* ── Dark mode: knoppen ─────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .btn-primary {
+    background-color: #38bdf8;
+    border-color: #38bdf8;
+    color: #0d1b2a;
+    font-weight: 600;
+}
+
+[data-bs-theme="dark"] .btn-primary:hover {
+    background-color: #7dd3fc;
+    border-color: #7dd3fc;
+    color: #0d1b2a;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary {
+    border-color: rgba(56, 189, 248, 0.3);
+    color: #94a3b8;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+    background-color: rgba(56, 189, 248, 0.1);
+    border-color: #38bdf8;
+    color: #38bdf8;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+    border-color: #38bdf8;
+    color: #38bdf8;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+    background-color: rgba(56, 189, 248, 0.15);
+    color: #7dd3fc;
+}
+
+/* ── Dark mode: badges ──────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .badge.bg-secondary {
+    background-color: #1e3a5f !important;
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+[data-bs-theme="dark"] .badge.bg-primary {
+    background-color: #38bdf8 !important;
+    color: #0d1b2a;
+}
+
+/* ── Dark mode: tabellen ────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .table {
+    --bs-table-bg: transparent;
+    --bs-table-border-color: rgba(56, 189, 248, 0.1);
+    color: #e2e8f0;
+}
+
+/* ── Dark mode: offcanvas ───────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] .offcanvas {
+    background-color: #162032;
+    border-left-color: rgba(56, 189, 248, 0.2);
+}
+
+[data-bs-theme="dark"] .list-group-item {
+    background-color: #162032;
+    border-color: rgba(56, 189, 248, 0.1);
+    color: #e2e8f0;
+}
+
+/* ── Hover effecten ─────────────────────────────────────────────────────── */
+
+.card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.card:hover {
+    border-color: var(--bs-primary) !important;
+}
+
+/* ── Paginatitel ────────────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] h1,
+[data-bs-theme="dark"] h2,
+[data-bs-theme="dark"] h3 {
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] h1 .bi,
+[data-bs-theme="dark"] h1 .text-primary {
+    color: #38bdf8 !important;
+}
+
+/* ── Code/JSON weergave ─────────────────────────────────────────────────── */
+
 pre {
     border-radius: 0 0 0.375rem 0.375rem;
 }
 
-/* Kaart-checkbox hover effect */
-.form-check.card {
-    cursor: pointer;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
+[data-bs-theme="dark"] pre {
+    background-color: #0a1628;
+    border-color: rgba(56, 189, 248, 0.15);
+    color: #bae6fd;
 }
 
-.form-check.card:hover {
-    border-color: var(--bs-primary) !important;
-}
+/* ── Blazor fout-overlay ────────────────────────────────────────────────── */
 
-/* Blazor fout-overlay */
 #blazor-error-ui {
     background: lightyellow;
     bottom: 0;
@@ -52,7 +243,8 @@ pre {
     top: 0.5rem;
 }
 
-/* Statistieken kaarten */
+/* ── Statistieken kaarten ───────────────────────────────────────────────── */
+
 .display-6 {
     font-size: 2rem;
 }
