@@ -15,7 +15,15 @@ git clone https://github.com/your-username/InitiativeMerger.git
 cd InitiativeMerger
 ```
 
-### 3. Add the upstream remote
+### 3. Set up the commit message template
+
+Run this once after cloning — it pre-fills your editor with a guided template whenever you run `git commit`:
+
+```bash
+git config commit.template .gitmessage
+```
+
+### 4. Add the upstream remote
 
 This lets you pull in future changes from the original repository:
 
@@ -23,7 +31,7 @@ This lets you pull in future changes from the original repository:
 git remote add upstream https://github.com/martinpronk/InitiativeMerger.git
 ```
 
-### 4. Create a feature branch
+### 5. Create a feature branch
 
 Never work directly on `main`. Create a branch with a descriptive name:
 
@@ -33,21 +41,21 @@ git checkout -b feature/your-feature-name
 git checkout -b fix/short-description
 ```
 
-### 5. Make your changes
+### 6. Make your changes
 
 - Keep changes focused — one feature or fix per pull request
 - Make sure the project still builds: `dotnet build`
 - Test your changes locally by running the web app: `dotnet run --project src/InitiativeMerger.Web`
 
-### 6. Commit and push to your fork
+### 7. Commit and push to your fork
 
 ```bash
 git add .
-git commit -m "Short description of what and why"
+git commit   # opens the template in your editor
 git push origin feature/your-feature-name
 ```
 
-### 7. Open a pull request
+### 8. Open a pull request
 
 Go to your fork on GitHub. You will see a **Compare & pull request** button. Click it, fill in a clear title and description, and submit the PR against the `main` branch of the original repository.
 

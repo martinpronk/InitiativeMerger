@@ -1,0 +1,18 @@
+# Title: short summary, max 72 characters, imperative mood
+# Example: "Add CIS v3.0 to well-known initiative catalogue"
+#
+# ── What ────────────────────────────────────────────────────────────────────
+# (Optional) Bullet points describing what changed:
+#
+# -
+#
+# ── Why ─────────────────────────────────────────────────────────────────────
+# (Optional) Why was this change necessary?
+#
+#
+# ── Notes ───────────────────────────────────────────────────────────────────
+# Related issue: #
+# Breaking change: yes / no
+#
+# ────────────────────────────────────────────────────────────────────────────
+# Lines starting with # are ignored by git.
